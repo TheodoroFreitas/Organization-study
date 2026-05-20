@@ -105,11 +105,19 @@
     current: "silence",
   };
 
+  const cloudSync = {
+    enabled: false,
+    docRef: null,
+    saveTimer: null,
+    status: "Local",
+  };
+
   document.addEventListener("DOMContentLoaded", async () => {
     if (window.studyAuth?.enabled) {
       const allowed = await window.studyAuth.ready;
       if (!allowed) return;
     }
+    await initializeCloudState();
     ensureWeekPlan();
     render();
   });
@@ -269,8 +277,89 @@
     };
   }
 
-  function saveState() {
+  function saveLocalState() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  function saveState() {
+    saveLocalState();
+    scheduleCloudSave();
+  }
+
+  async function initializeCloudState() {
+    if (!window.studyAuth?.enabled || !window.studyAuth.user || !window.firebase?.firestore) return;
+
+    cloudSync.enabled = true;
+    cloudSync.status = "Conectando";
+    const userId = window.studyAuth.user.uid;
+    cloudSync.docRef = window.firebase
+      .firestore()
+      .collection("users")
+      .doc(userId)
+      .collection("studyState")
+      .doc("main");
+
+    try {
+      const snapshot = await cloudSync.docRef.get();
+      if (snapshot.exists && snapshot.data()?.state) {
+        state = normalizeState(snapshot.data().state);
+        saveLocalState();
+        syncTimerSelection();
+        cloudSync.status = "Firebase";
+        return;
+      }
+
+      await saveCloudStateNow();
+      cloudSync.status = "Firebase";
+    } catch (error) {
+      console.error("Falha ao carregar dados do Firestore", error);
+      cloudSync.status = "Offline";
+    }
+  }
+
+  function syncTimerSelection() {
+    const subject = getSubject(timer.subjectId) || state.subjects[0];
+    timer.subjectId = subject?.id || "";
+    timer.topicId = subject?.topics.some((topicItem) => topicItem.id === timer.topicId)
+      ? timer.topicId
+      : subject?.topics[0]?.id || "";
+  }
+
+  function scheduleCloudSave() {
+    if (!cloudSync.enabled || !cloudSync.docRef) return;
+    cloudSync.status = "Salvando";
+    updateCloudStatus();
+    window.clearTimeout(cloudSync.saveTimer);
+    cloudSync.saveTimer = window.setTimeout(() => {
+      saveCloudStateNow().catch((error) => {
+        console.error("Falha ao salvar dados no Firestore", error);
+        cloudSync.status = "Offline";
+        updateCloudStatus();
+      });
+    }, 650);
+  }
+
+  async function saveCloudStateNow() {
+    if (!cloudSync.docRef || !window.studyAuth?.user) return;
+    await cloudSync.docRef.set(
+      {
+        app: "plano-certo",
+        ownerUid: window.studyAuth.user.uid,
+        state: JSON.parse(JSON.stringify(state)),
+        clientUpdatedAt: new Date().toISOString(),
+        updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+    cloudSync.status = "Firebase";
+    updateCloudStatus();
+  }
+
+  function updateCloudStatus() {
+    const status = document.querySelector("#cloud-status");
+    if (!status) return;
+    status.textContent = cloudSync.status;
+    status.className = `pill ${cloudSync.status === "Offline" ? "coral" : cloudSync.status === "Salvando" ? "amber" : "green"}`;
   }
 
   function render() {
@@ -327,6 +416,11 @@
                 <p class="page-subtitle">${meta.subtitle}</p>
               </div>
               <div class="top-actions">
+                ${
+                  cloudSync.enabled
+                    ? `<span id="cloud-status" class="pill ${cloudSync.status === "Offline" ? "coral" : cloudSync.status === "Salvando" ? "amber" : "green"}">${cloudSync.status}</span>`
+                    : ""
+                }
                 <button class="icon-button tooltip" type="button" data-action="export" data-tip="Exportar dados">
                   ${icon("download")}
                 </button>

@@ -1,0 +1,20 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAllowedGithubOwner(userId) {
+      return request.auth != null
+        && request.auth.uid == userId
+        && "github.com" in request.auth.token.firebase.identities
+        && request.auth.token.firebase.identities["github.com"].hasAny(["73147319"]);
+    }
+
+    match /users/{userId}/studyState/{documentId} {
+      allow read, write: if isAllowedGithubOwner(userId);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

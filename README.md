@@ -18,7 +18,15 @@ http://127.0.0.1:8080/
 
 ## Dados
 
-O app salva tudo no `localStorage` do navegador. Use os botoes de exportar e importar no topo para fazer backup em JSON.
+O app sincroniza os dados no Cloud Firestore quando o usuario autorizado esta logado. O `localStorage` continua como cache local e fallback offline. Use os botoes de exportar e importar no topo para fazer backup em JSON.
+
+Estrutura usada no Firestore:
+
+```text
+users/{firebaseAuthUid}/studyState/main
+```
+
+As regras em `firestore.rules` permitem leitura e escrita apenas para o usuario autenticado cujo GitHub provider ID e `73147319`.
 
 ## Autenticacao por GitHub
 
@@ -46,3 +54,4 @@ O ID publico do GitHub autorizado esta configurado em `allowedGithubProviderUids
 - `app.js`: regras do sistema, armazenamento, calendario, revisoes, Pomodoro e audio ambiente.
 - `auth.js`: login GitHub via Firebase Authentication.
 - `firebase-config.js`: configuracao do Firebase e allowlist.
+- `firestore.rules`: regras de seguranca do Cloud Firestore.
