@@ -197,8 +197,10 @@
 
     const defaultState = {
       exam: {
+        contestName: "Concurso do Tribunal",
         name: "Analista Judiciário",
         board: "FGV",
+        status: "open",
         examDate: addDaysISO(todayISO(), 82),
         dailyGoalHours: 4,
         weeklyGoalHours: 24,
@@ -269,9 +271,9 @@
     }
   }
 
-  function normalizeState(input) {
+  function normalizeState(input, options = {}) {
     const fallback = createDefaultState();
-    return {
+    const normalized = {
       ...fallback,
       ...input,
       exam: { ...fallback.exam, ...(input.exam || {}) },
@@ -281,6 +283,35 @@
       weekPlan: Array.isArray(input.weekPlan) ? input.weekPlan : [],
       settings: { ...fallback.settings, ...(input.settings || {}) },
     };
+    const cleaned = cleanupOrphanedData(normalized);
+    return options.withMeta ? cleaned : cleaned.state;
+  }
+
+  function cleanupOrphanedData(targetState = state) {
+    const subjectIds = new Set(targetState.subjects.map((subject) => subject.id));
+    const topicIds = new Set(
+      targetState.subjects.flatMap((subject) => (subject.topics || []).map((topicItem) => topicItem.id)),
+    );
+    const hasTopic = (item) => !item.topicId || topicIds.has(item.topicId);
+    const filterLinked = (item) => subjectIds.has(item.subjectId) && hasTopic(item);
+
+    const sessions = targetState.sessions.filter(filterLinked);
+    const reviews = targetState.reviews.filter(filterLinked);
+    const weekPlan = targetState.weekPlan.filter(filterLinked);
+    const changed =
+      sessions.length !== targetState.sessions.length ||
+      reviews.length !== targetState.reviews.length ||
+      weekPlan.length !== targetState.weekPlan.length;
+
+    return {
+      changed,
+      state: {
+        ...targetState,
+        sessions,
+        reviews,
+        weekPlan,
+      },
+    };
   }
 
   function saveLocalState() {
@@ -289,6 +320,11 @@
   }
 
   function saveState(options = {}) {
+    const cleaned = cleanupOrphanedData(state);
+    if (cleaned.changed) {
+      state = cleaned.state;
+      syncTimerSelection();
+    }
     saveLocalState();
     if (cloudSync.applyingRemote) return Promise.resolve();
     if (options.immediate) return saveCloudStateNow().catch(handleCloudSaveError);
@@ -321,10 +357,12 @@
     try {
       const snapshot = await cloudSync.docRef.get();
       if (snapshot.exists && snapshot.data()?.state) {
-        state = normalizeState(snapshot.data().state);
+        const normalized = normalizeState(snapshot.data().state, { withMeta: true });
+        state = normalized.state;
         saveLocalState();
         syncTimerSelection();
         cloudSync.status = "Firebase";
+        if (normalized.changed) await saveCloudStateNow();
         startCloudRealtimeSync();
         cloudSync.loadedOnce = true;
         return;
@@ -445,8 +483,8 @@
           <div class="sidebar-footer">
             <div class="exam-mini">
               <span>Concurso ativo</span>
-              <strong>${escapeHtml(state.exam.name)}</strong>
-              <span>${escapeHtml(state.exam.board)} · ${daysUntilExam()} dias para a prova</span>
+              <strong>${escapeHtml(state.exam.contestName || state.exam.name)}</strong>
+              <span>${sidebarExamMeta()}</span>
             </div>
             <button class="button primary" type="button" data-view="foco">
               ${icon("play")} Iniciar foco
@@ -482,16 +520,6 @@
                     ? `<span id="cloud-status" class="pill ${cloudSync.status === "Offline" ? "coral" : ["Salvando", "Novo", "Sem Firebase", "Sem login"].includes(cloudSync.status) ? "amber" : "green"}">${cloudSync.status}</span>`
                     : ""
                 }
-                <button class="icon-button tooltip" type="button" data-action="export" data-tip="Exportar dados">
-                  ${icon("download")}
-                </button>
-                <label class="icon-button tooltip" data-tip="Importar dados">
-                  ${icon("upload")}
-                  <input class="hidden" type="file" id="import-file" accept="application/json" />
-                </label>
-                <button class="icon-button tooltip" type="button" data-action="reset-demo" data-tip="Restaurar demonstração">
-                  ${icon("rotate-ccw")}
-                </button>
               </div>
             </div>
 
@@ -539,7 +567,7 @@
     const dueReviews = getDueReviews();
     return `
       <div class="summary-grid">
-        ${metricCard("calendar-clock", "Prova", `${daysUntilExam()} dias`, formatDate(state.exam.examDate), "--accent: var(--coral)")}
+        ${metricCard("calendar-clock", "Prova", examCountdownText(), examDateCaption(), "--accent: var(--coral)")}
         ${metricCard("hourglass", "Horas na semana", `${formatNumber(metrics.weekHours)}h`, `meta de ${state.exam.weeklyGoalHours}h`, "--accent: var(--blue)")}
         ${metricCard("trending-up", "Avanço geral", `${metrics.progress}%`, `${metrics.completedTopics} assuntos concluídos`, "--accent: var(--green)")}
         ${metricCard("repeat-2", "Revisões", `${dueReviews.length}`, "pendentes até hoje", "--accent: var(--amber)")}
@@ -623,21 +651,41 @@
   }
 
   function renderEdital() {
+    const examStatus = state.exam.status || "open";
+    const hasExamDate = Boolean(state.exam.examDate);
+    const dateLabel =
+      examStatus === "open" ? "Data da prova" : examStatus === "not-open" ? "Data prevista" : "Previsão opcional";
     return `
       <div class="content-stack">
         <section class="section surface surface-pad">
           <form id="exam-form" class="form-grid">
             <div class="field">
-              <label for="exam-name">Cargo ou concurso</label>
-              <input id="exam-name" value="${escapeAttr(state.exam.name)}" placeholder="Ex.: Técnico Judiciário" />
+              <label for="contest-name">Nome do concurso</label>
+              <input id="contest-name" value="${escapeAttr(state.exam.contestName || "")}" placeholder="Ex.: TJ SP, TRT, Prefeitura" />
+            </div>
+            <div class="field">
+              <label for="exam-name">Cargo ou área</label>
+              <input id="exam-name" value="${escapeAttr(state.exam.name)}" placeholder="Ex.: Técnico Judiciário, TI, Fiscal" />
             </div>
             <div class="field">
               <label for="exam-board">Banca</label>
               <input id="exam-board" value="${escapeAttr(state.exam.board)}" placeholder="Ex.: Cebraspe, FGV, FCC" />
             </div>
             <div class="field">
-              <label for="exam-date">Data da prova</label>
-              <input id="exam-date" type="date" value="${state.exam.examDate}" />
+              <label for="exam-status">Situação</label>
+              <select id="exam-status">
+                ${[
+                  ["open", "Edital aberto"],
+                  ["not-open", "Edital ainda não aberto"],
+                  ["no-date", "Sem data definida"],
+                ]
+                  .map(([value, label]) => `<option value="${value}" ${examStatus === value ? "selected" : ""}>${label}</option>`)
+                  .join("")}
+              </select>
+            </div>
+            <div class="field">
+              <label for="exam-date">${dateLabel}</label>
+              <input id="exam-date" type="date" value="${hasExamDate ? state.exam.examDate : ""}" />
             </div>
             <div class="field">
               <label for="study-mode">Modo de estudo</label>
@@ -663,14 +711,18 @@
               <button class="button primary" type="submit">${icon("save")} Salvar edital</button>
             </div>
           </form>
+          <div class="info-note">
+            ${icon("info")}
+            <span>Use "edital ainda não aberto" quando a banca ou a data forem previsão. Quando o edital sair, altere a situação e gere novamente a semana.</span>
+          </div>
         </section>
 
         <section class="section">
           <div class="summary-grid">
+            ${metricCard("clipboard-list", "Concurso", escapeHtml(state.exam.contestName || state.exam.name), examStatusLabel(), "--accent: var(--green)")}
             ${metricCard("landmark", "Banca", escapeHtml(state.exam.board), "perfil e estilo de cobrança", "--accent: var(--blue)")}
             ${metricCard("map-pin", "Local de foco", escapeHtml(state.exam.focusPlace), state.exam.studyMode, "--accent: var(--green)")}
             ${metricCard("target", "Meta diária", `${state.exam.dailyGoalHours}h`, "horas líquidas", "--accent: var(--amber)")}
-            ${metricCard("calendar-check", "Meta semanal", `${state.exam.weeklyGoalHours}h`, "horas líquidas", "--accent: var(--coral)")}
           </div>
         </section>
       </div>
@@ -710,6 +762,10 @@
               `,
             )
             .join("")}
+        </div>
+        <div class="info-note">
+          ${icon("info")}
+          <span>Defina horário inicial, tamanho dos blocos, pausas e dias disponíveis. O botão "Gerar semana" distribui as matérias pela prioridade do edital: peso, dificuldade e avanço atual.</span>
         </div>
       </section>
 
@@ -838,6 +894,10 @@
                   `,
                 )
                 .join("")}
+            </div>
+            <div class="info-note">
+              ${icon("info")}
+              <span>Esses ciclos criam revisões automáticas depois que você estuda um assunto. Exemplo: 24h gera uma revisão para o dia seguinte; 7d, 15d e 30d reforçam a retenção ao longo do mês.</span>
             </div>
           </section>
 
@@ -1424,9 +1484,11 @@
     event.preventDefault();
     state.exam = {
       ...state.exam,
+      contestName: valueOf("#contest-name") || valueOf("#exam-name") || "Concurso sem nome",
       name: valueOf("#exam-name") || "Concurso sem nome",
       board: valueOf("#exam-board") || "Banca não definida",
-      examDate: valueOf("#exam-date") || todayISO(),
+      status: valueOf("#exam-status") || "open",
+      examDate: valueOf("#exam-date"),
       studyMode: valueOf("#study-mode") || "Ciclo inteligente",
       dailyGoalHours: Number(valueOf("#daily-goal")) || 1,
       weeklyGoalHours: Number(valueOf("#weekly-goal")) || 1,
@@ -1515,9 +1577,11 @@
     state.subjects = state.subjects.filter((subject) => subject.id !== id);
     state.weekPlan = state.weekPlan.filter((block) => block.subjectId !== id);
     state.reviews = state.reviews.filter((item) => item.subjectId !== id);
+    state.sessions = state.sessions.filter((item) => item.subjectId !== id);
+    syncTimerSelection();
     saveState();
     render();
-    showToast("Matéria removida.");
+    showToast("Matéria removida com histórico e revisões vinculados.");
   }
 
   function deleteTopic(subjectId, topicId) {
@@ -1526,9 +1590,11 @@
     subject.topics = subject.topics.filter((item) => item.id !== topicId);
     state.weekPlan = state.weekPlan.filter((block) => block.topicId !== topicId);
     state.reviews = state.reviews.filter((item) => item.topicId !== topicId);
+    state.sessions = state.sessions.filter((item) => item.topicId !== topicId);
+    syncTimerSelection();
     saveState();
     render();
-    showToast("Assunto removido.");
+    showToast("Assunto removido com histórico e revisões vinculados.");
   }
 
   function toggleWeekday(day) {
@@ -2211,8 +2277,37 @@
     return isoFromDate(startOfWeek(toDate(iso))) === isoFromDate(startOfWeek(toDate(todayISO())));
   }
 
+  function examStatusLabel() {
+    const labels = {
+      open: "Edital aberto",
+      "not-open": "Edital ainda não aberto",
+      "no-date": "Sem data definida",
+    };
+    return labels[state.exam.status || "open"] || labels.open;
+  }
+
+  function sidebarExamMeta() {
+    const board = escapeHtml(state.exam.board || "Banca não definida");
+    const days = daysUntilExam();
+    if (days === null) return `${board} · ${examStatusLabel()}`;
+    return `${board} · ${days === 0 ? "prova hoje" : `${days} dias para a prova`}`;
+  }
+
+  function examCountdownText() {
+    const days = daysUntilExam();
+    if (days === null) return "Sem data";
+    return days === 0 ? "Hoje" : `${days} dias`;
+  }
+
+  function examDateCaption() {
+    if (!state.exam.examDate) return examStatusLabel();
+    return state.exam.status === "open" ? formatDate(state.exam.examDate) : `previsão em ${formatDate(state.exam.examDate)}`;
+  }
+
   function daysUntilExam() {
+    if (!state.exam.examDate) return null;
     const diff = toDate(state.exam.examDate).getTime() - toDate(todayISO()).getTime();
+    if (Number.isNaN(diff)) return null;
     return Math.max(0, Math.ceil(diff / 86400000));
   }
 
@@ -2242,6 +2337,7 @@
   }
 
   function formatDate(iso) {
+    if (!iso) return "Sem data";
     return new Intl.DateTimeFormat("pt-BR", {
       day: "2-digit",
       month: "2-digit",

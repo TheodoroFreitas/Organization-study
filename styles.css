@@ -646,6 +646,26 @@ button:disabled {
   color: #235d45;
 }
 
+.info-note {
+  margin-top: 14px;
+  border: 1px solid rgba(52, 109, 166, 0.22);
+  border-radius: var(--radius);
+  background: var(--blue-soft);
+  color: #255276;
+  padding: 12px 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: 1.45;
+}
+
+.info-note svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  margin-top: 2px;
+}
+
 .subjects-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
