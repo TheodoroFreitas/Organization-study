@@ -1032,7 +1032,7 @@
             <div class="section-header">
               <div>
                 <h2>Ritual de foco</h2>
-                <p>${escapeHtml(state.exam.focusPlace)} · ${escapeHtml(state.exam.studyMode)}</p>
+                <p id="focus-ritual-caption">${escapeHtml(state.exam.focusPlace)} · ${escapeHtml(state.exam.studyMode)}</p>
               </div>
             </div>
             <div class="task-list">
@@ -1055,7 +1055,7 @@
                 <p>Registro líquido de estudo.</p>
               </div>
             </div>
-            ${renderHistoryList(4)}
+            <div id="focus-history">${renderHistoryList(4)}</div>
           </section>
         </div>
       </div>
@@ -1403,6 +1403,7 @@
     document.querySelector("#focus-place-input")?.addEventListener("change", (event) => {
       state.exam.focusPlace = event.target.value.trim() || "Local de foco";
       saveState();
+      updateFocusRitualCaption();
       showToast("Local de foco atualizado.");
     });
     document.querySelector("#volume")?.addEventListener("input", (event) => {
@@ -1721,14 +1722,14 @@
     timer.subjectId = event.target.value;
     const subject = getSubject(timer.subjectId);
     timer.topicId = subject?.topics[0]?.id || "";
-    render();
+    updateFocusTopicOptions(subject);
   }
 
   function setDuration(minutes) {
     if (timer.running) return;
     timer.duration = minutes * 60;
     timer.remaining = timer.duration;
-    render();
+    updateFocusControls();
   }
 
   function toggleTimer() {
@@ -1745,7 +1746,7 @@
           notifyTimerDone();
         }
       }, 1000);
-      render();
+      updateFocusControls();
     }
   }
 
@@ -1753,13 +1754,13 @@
     timer.running = false;
     window.clearInterval(timer.interval);
     timer.interval = null;
-    if (shouldRender) render();
+    if (shouldRender) updateFocusControls();
   }
 
   function resetTimer() {
     pauseTimer(false);
     timer.remaining = timer.duration;
-    render();
+    updateFocusControls();
   }
 
   function saveFocusSession() {
@@ -1786,7 +1787,9 @@
     pauseTimer(false);
     timer.remaining = timer.duration;
     saveState();
-    render();
+    resetFocusSessionFields();
+    updateFocusControls();
+    updateFocusHistory();
     showToast("Sessão registrada.");
   }
 
@@ -1863,28 +1866,30 @@
   async function toggleSound(sound) {
     if (audio.playing && audio.current === sound) {
       stopSound();
-      render();
+      updateSoundButtons();
       return;
     }
     if (sound === "silence") {
       stopSound();
       audio.current = "silence";
-      render();
+      updateSoundButtons();
       return;
     }
     await startSound(sound);
-    render();
+    updateSoundButtons();
   }
 
   async function saveYoutubeLink() {
     const url = valueOf("#youtube-url");
-    if (url && !getYouTubeEmbed(url)) {
+    const nextEmbed = getYouTubeEmbed(url);
+    const previousEmbed = getYouTubeEmbed(state.settings.youtubeUrl);
+    if (url && !nextEmbed) {
       showToast("Cole um link vÃ¡lido do YouTube, sem Shorts.");
       return;
     }
     state.settings.youtubeUrl = url;
     await saveState({ immediate: true });
-    render();
+    if (nextEmbed !== previousEmbed) render();
     showToast(url ? "Link do YouTube salvo." : "Link do YouTube removido.");
   }
 
@@ -2414,6 +2419,66 @@
     const caption = document.querySelector("#timer-caption");
     if (display) display.textContent = formatSeconds(timer.remaining);
     if (caption) caption.textContent = timer.running ? "Sessão em andamento" : "Pronto para começar";
+  }
+
+  function updateFocusControls() {
+    updateTimerFace();
+    updateDurationButtons();
+    updateTimerButton();
+    drawIcons();
+  }
+
+  function updateDurationButtons() {
+    document.querySelectorAll('[data-action="set-duration"]').forEach((button) => {
+      const minutes = Number(button.dataset.minutes);
+      button.classList.toggle("is-active", timer.duration === minutes * 60);
+    });
+  }
+
+  function updateTimerButton() {
+    const button = document.querySelector('[data-action="toggle-timer"]');
+    if (!button) return;
+    button.innerHTML = `${icon(timer.running ? "pause" : "play")} ${timer.running ? "Pausar" : "Iniciar"}`;
+  }
+
+  function updateSoundButtons() {
+    document.querySelectorAll('[data-action="toggle-sound"]').forEach((button) => {
+      const active = audio.current === button.dataset.sound && audio.playing;
+      button.dataset.tip = active ? "Parar" : "Tocar";
+      button.innerHTML = icon(active ? "square" : "play");
+    });
+    drawIcons();
+  }
+
+  function updateFocusTopicOptions(subject = getSubject(timer.subjectId)) {
+    const topicSelect = document.querySelector("#focus-topic");
+    if (!topicSelect) return;
+    const topics = subject?.topics || [];
+    if (!topics.some((topicItem) => topicItem.id === timer.topicId)) {
+      timer.topicId = topics[0]?.id || "";
+    }
+    topicSelect.innerHTML = topics
+      .map((topicItem) => `<option value="${escapeAttr(topicItem.id)}" ${topicItem.id === timer.topicId ? "selected" : ""}>${escapeHtml(topicItem.title)}</option>`)
+      .join("");
+  }
+
+  function updateFocusRitualCaption() {
+    const caption = document.querySelector("#focus-ritual-caption");
+    if (caption) caption.textContent = `${state.exam.focusPlace} · ${state.exam.studyMode}`;
+  }
+
+  function updateFocusHistory() {
+    const history = document.querySelector("#focus-history");
+    if (history) history.innerHTML = renderHistoryList(4);
+  }
+
+  function resetFocusSessionFields() {
+    const questions = document.querySelector("#focus-questions");
+    const correct = document.querySelector("#focus-correct");
+    const notes = document.querySelector("#focus-notes");
+    if (questions) questions.value = "0";
+    if (correct) correct.value = "0";
+    if (notes) notes.value = "";
   }
 
   function getVolumePercent() {
