@@ -505,6 +505,7 @@
     bindEvents();
     drawIcons();
     updateTimerFace();
+    window.setTimeout(setYouTubeVolume, 350);
   }
 
   function renderBrand() {
@@ -947,8 +948,8 @@
                 <p>Áudio gerado no navegador.</p>
               </div>
               <div class="field" style="min-width: 120px">
-                <label for="volume">Volume</label>
-                <input id="volume" type="range" min="0" max="0.6" step="0.01" value="${state.settings.soundVolume}" />
+                <label for="volume">Volume <span id="volume-value">${getVolumePercent()}%</span></label>
+                <input id="volume" type="range" min="0" max="100" step="1" value="${getVolumePercent()}" />
               </div>
             </div>
             <div class="sound-list">
@@ -1293,6 +1294,7 @@
     return `
       <div class="youtube-frame">
         <iframe
+          id="youtube-player"
           src="${escapeAttr(embed)}"
           title="YouTube"
           loading="lazy"
@@ -1344,9 +1346,15 @@
       showToast("Local de foco atualizado.");
     });
     document.querySelector("#volume")?.addEventListener("input", (event) => {
-      state.settings.soundVolume = Number(event.target.value);
+      state.settings.soundVolume = clamp(Number(event.target.value), 0, 100) / 100;
+      const label = document.querySelector("#volume-value");
+      if (label) label.textContent = `${getVolumePercent()}%`;
       saveState();
       if (audio.playing) setAudioVolume();
+      setYouTubeVolume();
+    });
+    document.querySelector("#youtube-player")?.addEventListener("load", () => {
+      window.setTimeout(setYouTubeVolume, 350);
     });
 
     document.querySelectorAll('[data-action="subject-field"]').forEach((input) => {
@@ -1826,7 +1834,14 @@
     if (!raw) return "";
 
     if (/^[A-Za-z0-9_-]{11}$/.test(raw)) {
-      return `https://www.youtube-nocookie.com/embed/${raw}?rel=0&modestbranding=1&playsinline=1`;
+      const params = new URLSearchParams({
+        enablejsapi: "1",
+        origin: getPlayerOrigin(),
+        rel: "0",
+        modestbranding: "1",
+        playsinline: "1",
+      });
+      return `https://www.youtube-nocookie.com/embed/${raw}?${params.toString()}`;
     }
 
     let url;
@@ -1855,6 +1870,8 @@
 
     if (videoId && /^[A-Za-z0-9_-]{11}$/.test(videoId)) {
       const params = new URLSearchParams({
+        enablejsapi: "1",
+        origin: getPlayerOrigin(),
         rel: "0",
         modestbranding: "1",
         playsinline: "1",
@@ -1865,6 +1882,8 @@
 
     if (playlist && /^[A-Za-z0-9_-]+$/.test(playlist)) {
       const params = new URLSearchParams({
+        enablejsapi: "1",
+        origin: getPlayerOrigin(),
         list: playlist,
         rel: "0",
         modestbranding: "1",
@@ -1886,7 +1905,7 @@
     if (audio.ctx.state === "suspended") await audio.ctx.resume();
     const ctx = audio.ctx;
     const master = ctx.createGain();
-    master.gain.value = state.settings.soundVolume;
+    master.gain.value = getNativeVolume();
     master.connect(ctx.destination);
     audio.nodes = [master];
 
@@ -1973,7 +1992,7 @@
 
   function setAudioVolume() {
     const master = audio.nodes[0];
-    if (master?.gain) master.gain.value = state.settings.soundVolume;
+    if (master?.gain) master.gain.value = getNativeVolume();
   }
 
   function notifyTimerDone() {
@@ -2299,6 +2318,38 @@
     const caption = document.querySelector("#timer-caption");
     if (display) display.textContent = formatSeconds(timer.remaining);
     if (caption) caption.textContent = timer.running ? "Sessão em andamento" : "Pronto para começar";
+  }
+
+  function getVolumePercent() {
+    const volume = Number(state.settings.soundVolume);
+    if (!Number.isFinite(volume)) return 22;
+    return volume <= 1 ? clamp(Math.round(volume * 100), 0, 100) : clamp(Math.round(volume), 0, 100);
+  }
+
+  function getNativeVolume() {
+    return getVolumePercent() / 100;
+  }
+
+  function getPlayerOrigin() {
+    return window.location.origin && window.location.origin !== "null"
+      ? window.location.origin
+      : "https://study-d421f.web.app";
+  }
+
+  function setYouTubeVolume() {
+    const iframe = document.querySelector("#youtube-player");
+    if (!iframe?.contentWindow) return;
+
+    const volume = getVolumePercent();
+    const sendCommand = (func, args = []) => {
+      iframe.contentWindow.postMessage(
+        JSON.stringify({ event: "command", func, args }),
+        "https://www.youtube-nocookie.com",
+      );
+    };
+
+    sendCommand("setVolume", [volume]);
+    sendCommand(volume === 0 ? "mute" : "unMute");
   }
 
   function showToast(message) {
