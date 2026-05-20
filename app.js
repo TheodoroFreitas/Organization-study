@@ -105,7 +105,11 @@
     current: "silence",
   };
 
-  document.addEventListener("DOMContentLoaded", () => {
+  document.addEventListener("DOMContentLoaded", async () => {
+    if (window.studyAuth?.enabled) {
+      const allowed = await window.studyAuth.ready;
+      if (!allowed) return;
+    }
     ensureWeekPlan();
     render();
   });
@@ -297,6 +301,13 @@
             <button class="button primary" type="button" data-view="foco">
               ${icon("play")} Iniciar foco
             </button>
+            ${
+              window.studyAuth?.enabled
+                ? `<button class="button ghost" type="button" data-action="sign-out">
+                    ${icon("log-out")} Sair
+                  </button>`
+                : ""
+            }
           </div>
         </aside>
 
@@ -1200,6 +1211,10 @@
       "reset-timer": resetTimer,
       "save-session": saveFocusSession,
       "toggle-sound": () => toggleSound(sound),
+      "sign-out": async () => {
+        await window.studyAuth?.signOut?.();
+        window.location.reload();
+      },
     };
 
     if (actions[action]) actions[action]();
