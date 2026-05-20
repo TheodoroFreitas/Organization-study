@@ -60,7 +60,7 @@
       const button = event.target.closest("[data-auth-action]");
       if (!button) return;
       if (button.dataset.authAction === "login") {
-        await signIn(auth, provider);
+        await signIn(auth, provider, resolve);
       }
       if (button.dataset.authAction === "logout") {
         await auth.signOut();
@@ -97,7 +97,7 @@
     });
   }
 
-  async function signIn(auth, provider) {
+  async function signIn(auth, provider, resolve) {
     try {
       renderAuthScreen({
         title: "Abrindo GitHub",
@@ -110,6 +110,7 @@
       if (isAllowedUser(result.user, result.additionalUserInfo?.profile)) {
         studyAuth.user = result.user;
         clearAuthScreen();
+        resolve(true);
         return;
       }
 
