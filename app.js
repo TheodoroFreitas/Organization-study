@@ -108,8 +108,12 @@
   const cloudSync = {
     enabled: false,
     docRef: null,
+    unsubscribe: null,
     saveTimer: null,
     status: "Local",
+    clientId: uid("client"),
+    applyingRemote: false,
+    loadedOnce: false,
   };
 
   document.addEventListener("DOMContentLoaded", async () => {
@@ -283,6 +287,7 @@
 
   function saveState() {
     saveLocalState();
+    if (cloudSync.applyingRemote) return;
     scheduleCloudSave();
   }
 
@@ -306,10 +311,14 @@
         saveLocalState();
         syncTimerSelection();
         cloudSync.status = "Firebase";
+        startCloudRealtimeSync();
+        cloudSync.loadedOnce = true;
         return;
       }
 
       await saveCloudStateNow();
+      startCloudRealtimeSync();
+      cloudSync.loadedOnce = true;
       cloudSync.status = "Firebase";
     } catch (error) {
       console.error("Falha ao carregar dados do Firestore", error);
@@ -344,6 +353,7 @@
     await cloudSync.docRef.set(
       {
         app: "plano-certo",
+        clientId: cloudSync.clientId,
         ownerUid: window.studyAuth.user.uid,
         state: JSON.parse(JSON.stringify(state)),
         clientUpdatedAt: new Date().toISOString(),
@@ -353,6 +363,38 @@
     );
     cloudSync.status = "Firebase";
     updateCloudStatus();
+  }
+
+  function startCloudRealtimeSync() {
+    if (!cloudSync.docRef || cloudSync.unsubscribe) return;
+
+    cloudSync.unsubscribe = cloudSync.docRef.onSnapshot(
+      { includeMetadataChanges: true },
+      (snapshot) => {
+        if (!snapshot.exists || !snapshot.data()?.state) return;
+        if (snapshot.metadata.hasPendingWrites) return;
+        if (snapshot.data().clientId === cloudSync.clientId) return;
+
+        cloudSync.applyingRemote = true;
+        state = normalizeState(snapshot.data().state);
+        saveLocalState();
+        syncTimerSelection();
+        cloudSync.applyingRemote = false;
+        cloudSync.status = "Firebase";
+
+        if (cloudSync.loadedOnce) {
+          render();
+          showToast("Dados atualizados pelo Firebase.");
+        }
+        cloudSync.loadedOnce = true;
+        updateCloudStatus();
+      },
+      (error) => {
+        console.error("Falha no realtime do Firestore", error);
+        cloudSync.status = "Offline";
+        updateCloudStatus();
+      },
+    );
   }
 
   function updateCloudStatus() {
