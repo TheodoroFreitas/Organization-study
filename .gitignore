@@ -4,3 +4,4 @@ node_modules/
 firebase-debug.log
 *.local
 *.log
+auth-users.json

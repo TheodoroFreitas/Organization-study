@@ -2,14 +2,14 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isSignedGithubOwner(userId) {
+    function isStudyOwner(userId) {
       return request.auth != null
         && request.auth.uid == userId
-        && request.auth.token.firebase.sign_in_provider == "github.com";
+        && request.auth.uid == "4JoPsyLLHrd0A0wIBAU0XYNs7XU2";
     }
 
     match /users/{userId}/studyState/{documentId} {
-      allow read, write: if isSignedGithubOwner(userId);
+      allow read, write: if isStudyOwner(userId);
     }
 
     match /{document=**} {

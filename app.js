@@ -287,16 +287,27 @@
     hasLocalStoredState = true;
   }
 
-  function saveState() {
+  function saveState(options = {}) {
     saveLocalState();
-    if (cloudSync.applyingRemote) return;
+    if (cloudSync.applyingRemote) return Promise.resolve();
+    if (options.immediate) return saveCloudStateNow().catch(handleCloudSaveError);
     scheduleCloudSave();
+    return Promise.resolve();
   }
 
   async function initializeCloudState() {
-    if (!window.studyAuth?.enabled || !window.studyAuth.user || !window.firebase?.firestore) return;
+    if (!window.studyAuth?.enabled) return;
 
     cloudSync.enabled = true;
+    if (!window.studyAuth.user) {
+      cloudSync.status = "Sem login";
+      return;
+    }
+    if (!window.firebase?.firestore) {
+      cloudSync.status = "Sem Firebase";
+      return;
+    }
+
     cloudSync.status = "Conectando";
     const userId = window.studyAuth.user.uid;
     cloudSync.docRef = window.firebase
@@ -344,13 +355,15 @@
     updateCloudStatus();
     window.clearTimeout(cloudSync.saveTimer);
     cloudSync.saveTimer = window.setTimeout(() => {
-      saveCloudStateNow().catch((error) => {
-        console.error("Falha ao salvar dados no Firestore", error);
-        cloudSync.status = "Offline";
-        updateCloudStatus();
-        showToast("Não consegui salvar no Firebase. Confira o login e as regras.");
-      });
+      saveCloudStateNow().catch(handleCloudSaveError);
     }, 250);
+  }
+
+  function handleCloudSaveError(error) {
+    console.error("Falha ao salvar dados no Firestore", error);
+    cloudSync.status = "Offline";
+    updateCloudStatus();
+    showToast("Não consegui salvar no Firebase. Confira o login e as regras.");
   }
 
   async function saveCloudStateNow() {
@@ -406,7 +419,7 @@
     const status = document.querySelector("#cloud-status");
     if (!status) return;
     status.textContent = cloudSync.status;
-    status.className = `pill ${cloudSync.status === "Offline" ? "coral" : ["Salvando", "Novo"].includes(cloudSync.status) ? "amber" : "green"}`;
+    status.className = `pill ${cloudSync.status === "Offline" ? "coral" : ["Salvando", "Novo", "Sem Firebase", "Sem login"].includes(cloudSync.status) ? "amber" : "green"}`;
   }
 
   function render() {
@@ -465,7 +478,7 @@
               <div class="top-actions">
                 ${
                   cloudSync.enabled
-                    ? `<span id="cloud-status" class="pill ${cloudSync.status === "Offline" ? "coral" : ["Salvando", "Novo"].includes(cloudSync.status) ? "amber" : "green"}">${cloudSync.status}</span>`
+                    ? `<span id="cloud-status" class="pill ${cloudSync.status === "Offline" ? "coral" : ["Salvando", "Novo", "Sem Firebase", "Sem login"].includes(cloudSync.status) ? "amber" : "green"}">${cloudSync.status}</span>`
                     : ""
                 }
                 <button class="icon-button tooltip" type="button" data-action="export" data-tip="Exportar dados">
@@ -1366,7 +1379,7 @@
     if (event.currentTarget.dataset.action === "topic-progress") updateTopicProgress(event);
   }
 
-  function saveExam(event) {
+  async function saveExam(event) {
     event.preventDefault();
     state.exam = {
       ...state.exam,
@@ -1378,9 +1391,9 @@
       weeklyGoalHours: Number(valueOf("#weekly-goal")) || 1,
       focusPlace: valueOf("#focus-place") || "Local de foco",
     };
-    saveState();
+    await saveState({ immediate: true });
     render();
-    showToast("Edital salvo.");
+    showToast(cloudSync.enabled && cloudSync.status === "Firebase" ? "Edital salvo no Firebase." : "Edital salvo localmente.");
   }
 
   function saveWeekSettings(event) {

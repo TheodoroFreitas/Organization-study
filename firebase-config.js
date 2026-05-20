@@ -3,7 +3,7 @@ window.STUDY_AUTH_CONFIG = {
   allowedGithubLogins: ["TheodoroFreitas"],
   allowedGithubProviderUids: ["73147319"],
   allowedEmails: [],
-  allowedFirebaseUids: [],
+  allowedFirebaseUids: ["4JoPsyLLHrd0A0wIBAU0XYNs7XU2"],
   firebase: {
     apiKey: "AIzaSyDQwLfPcsHNH8XPeLCwG26bMOtjHvIa8f8",
     authDomain: "study-d421f.firebaseapp.com",
