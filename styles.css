@@ -956,6 +956,28 @@ button:disabled {
   height: 19px;
 }
 
+.youtube-panel {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.youtube-frame {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: #111820;
+}
+
+.youtube-frame iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
 .empty-state {
   border: 1px dashed var(--line-strong);
   border-radius: var(--radius);

@@ -217,6 +217,7 @@
         weekDays: [1, 2, 3, 4, 5, 6],
         reviewDays: [1, 7, 15, 30],
         soundVolume: 0.22,
+        youtubeUrl: "",
       },
     };
 
@@ -953,6 +954,17 @@
             <div class="sound-list">
               ${soundOptions.map(renderSoundItem).join("")}
             </div>
+            <div class="youtube-panel">
+              <div class="field">
+                <label for="youtube-url">YouTube</label>
+                <input id="youtube-url" value="${escapeAttr(state.settings.youtubeUrl || "")}" placeholder="Cole um link de vÃ­deo ou playlist" />
+              </div>
+              <div class="item-meta">
+                <button class="button" type="button" data-action="save-youtube">${icon("save")} Salvar link</button>
+                <button class="button" type="button" data-action="clear-youtube">${icon("x")} Limpar</button>
+              </div>
+              ${renderYouTubePlayer()}
+            </div>
           </section>
 
           <section class="section">
@@ -1273,6 +1285,25 @@
     `;
   }
 
+  function renderYouTubePlayer() {
+    if (!state.settings.youtubeUrl) return `<div class="empty-state">Nenhum link do YouTube salvo.</div>`;
+    const embed = getYouTubeEmbed(state.settings.youtubeUrl);
+    if (!embed) return `<div class="empty-state">Link do YouTube invÃ¡lido.</div>`;
+
+    return `
+      <div class="youtube-frame">
+        <iframe
+          src="${escapeAttr(embed)}"
+          title="YouTube"
+          loading="lazy"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          referrerpolicy="strict-origin-when-cross-origin"
+          allowfullscreen>
+        </iframe>
+      </div>
+    `;
+  }
+
   function bindEvents() {
     document.querySelectorAll("[data-view]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -1365,6 +1396,8 @@
       "reset-timer": resetTimer,
       "save-session": saveFocusSession,
       "toggle-sound": () => toggleSound(sound),
+      "save-youtube": saveYoutubeLink,
+      "clear-youtube": clearYoutubeLink,
       "sign-out": async () => {
         await window.studyAuth?.signOut?.();
         window.location.reload();
@@ -1767,6 +1800,79 @@
     }
     await startSound(sound);
     render();
+  }
+
+  async function saveYoutubeLink() {
+    const url = valueOf("#youtube-url");
+    if (url && !getYouTubeEmbed(url)) {
+      showToast("Cole um link vÃ¡lido do YouTube, sem Shorts.");
+      return;
+    }
+    state.settings.youtubeUrl = url;
+    await saveState({ immediate: true });
+    render();
+    showToast(url ? "Link do YouTube salvo." : "Link do YouTube removido.");
+  }
+
+  async function clearYoutubeLink() {
+    state.settings.youtubeUrl = "";
+    await saveState({ immediate: true });
+    render();
+    showToast("Link do YouTube removido.");
+  }
+
+  function getYouTubeEmbed(input) {
+    const raw = String(input || "").trim();
+    if (!raw) return "";
+
+    if (/^[A-Za-z0-9_-]{11}$/.test(raw)) {
+      return `https://www.youtube-nocookie.com/embed/${raw}?rel=0&modestbranding=1&playsinline=1`;
+    }
+
+    let url;
+    try {
+      url = new URL(raw);
+    } catch (error) {
+      return "";
+    }
+
+    const host = url.hostname.replace(/^www\./, "").replace(/^m\./, "");
+    if (!["youtube.com", "youtu.be", "youtube-nocookie.com"].includes(host)) return "";
+
+    const playlist = url.searchParams.get("list");
+    let videoId = url.searchParams.get("v");
+
+    if (host === "youtu.be") {
+      videoId = url.pathname.split("/").filter(Boolean)[0] || videoId;
+    }
+
+    const pathParts = url.pathname.split("/").filter(Boolean);
+    if (pathParts[0] === "shorts") return "";
+
+    if (["embed", "live"].includes(pathParts[0]) && pathParts[1]) {
+      videoId = pathParts[1];
+    }
+
+    if (videoId && /^[A-Za-z0-9_-]{11}$/.test(videoId)) {
+      const params = new URLSearchParams({
+        rel: "0",
+        modestbranding: "1",
+        playsinline: "1",
+      });
+      if (playlist) params.set("list", playlist);
+      return `https://www.youtube-nocookie.com/embed/${videoId}?${params.toString()}`;
+    }
+
+    if (playlist && /^[A-Za-z0-9_-]+$/.test(playlist)) {
+      const params = new URLSearchParams({
+        list: playlist,
+        rel: "0",
+        modestbranding: "1",
+      });
+      return `https://www.youtube-nocookie.com/embed/videoseries?${params.toString()}`;
+    }
+
+    return "";
   }
 
   async function startSound(sound) {
