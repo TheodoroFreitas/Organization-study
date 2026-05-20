@@ -83,6 +83,7 @@
   const colors = ["#346da6", "#2f7d5b", "#c98a16", "#d65f45", "#7057a3", "#287c8e"];
 
   let activeView = "dashboard";
+  let hasLocalStoredState = localStorage.getItem(STORAGE_KEY) !== null;
   let state = loadState();
   let calendarCursor = toDate(todayISO());
   let toastTimer = null;
@@ -283,6 +284,7 @@
 
   function saveLocalState() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    hasLocalStoredState = true;
   }
 
   function saveState() {
@@ -316,10 +318,12 @@
         return;
       }
 
-      await saveCloudStateNow();
+      if (hasLocalStoredState) {
+        await saveCloudStateNow();
+      }
       startCloudRealtimeSync();
       cloudSync.loadedOnce = true;
-      cloudSync.status = "Firebase";
+      cloudSync.status = hasLocalStoredState ? "Firebase" : "Novo";
     } catch (error) {
       console.error("Falha ao carregar dados do Firestore", error);
       cloudSync.status = "Offline";
@@ -344,8 +348,9 @@
         console.error("Falha ao salvar dados no Firestore", error);
         cloudSync.status = "Offline";
         updateCloudStatus();
+        showToast("Não consegui salvar no Firebase. Confira o login e as regras.");
       });
-    }, 650);
+    }, 250);
   }
 
   async function saveCloudStateNow() {
@@ -401,7 +406,7 @@
     const status = document.querySelector("#cloud-status");
     if (!status) return;
     status.textContent = cloudSync.status;
-    status.className = `pill ${cloudSync.status === "Offline" ? "coral" : cloudSync.status === "Salvando" ? "amber" : "green"}`;
+    status.className = `pill ${cloudSync.status === "Offline" ? "coral" : ["Salvando", "Novo"].includes(cloudSync.status) ? "amber" : "green"}`;
   }
 
   function render() {
@@ -460,7 +465,7 @@
               <div class="top-actions">
                 ${
                   cloudSync.enabled
-                    ? `<span id="cloud-status" class="pill ${cloudSync.status === "Offline" ? "coral" : cloudSync.status === "Salvando" ? "amber" : "green"}">${cloudSync.status}</span>`
+                    ? `<span id="cloud-status" class="pill ${cloudSync.status === "Offline" ? "coral" : ["Salvando", "Novo"].includes(cloudSync.status) ? "amber" : "green"}">${cloudSync.status}</span>`
                     : ""
                 }
                 <button class="icon-button tooltip" type="button" data-action="export" data-tip="Exportar dados">
