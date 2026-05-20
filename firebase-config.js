@@ -1,13 +1,15 @@
 window.STUDY_AUTH_CONFIG = {
-  enabled: false,
+  enabled: true,
   allowedGithubLogins: ["TheodoroFreitas"],
   allowedGithubProviderUids: ["73147319"],
   allowedEmails: [],
   allowedFirebaseUids: [],
   firebase: {
-    apiKey: "",
+    apiKey: "AIzaSyDQwLfPcsHNH8XPeLCwG26bMOtjHvIa8f8",
     authDomain: "study-d421f.firebaseapp.com",
     projectId: "study-d421f",
-    appId: "",
+    storageBucket: "study-d421f.firebasestorage.app",
+    messagingSenderId: "794431330743",
+    appId: "1:794431330743:web:a3a4243c812dfae4347032",
   },
 };
