@@ -820,7 +820,7 @@
             </div>
             <div class="field">
               <label for="subject-difficulty">Dificuldade</label>
-              <input id="subject-difficulty" type="number" min="1" max="5" value="3" />
+              <input id="subject-difficulty" type="number" min="1" max="10" value="3" />
             </div>
             <div class="field">
               <label for="subject-color">Cor</label>
@@ -1295,7 +1295,7 @@
           </div>
           <div class="field">
             <label>Dificuldade</label>
-            <input type="number" min="1" max="5" value="${subject.difficulty}" data-action="subject-field" data-id="${subject.id}" data-field="difficulty" />
+            <input type="number" min="1" max="10" value="${subject.difficulty}" data-action="subject-field" data-id="${subject.id}" data-field="difficulty" />
           </div>
         </div>
 
@@ -1524,7 +1524,7 @@
       name,
       color: valueOf("#subject-color") || colors[state.subjects.length % colors.length],
       weight: clamp(Number(valueOf("#subject-weight")) || 3, 1, 5),
-      difficulty: clamp(Number(valueOf("#subject-difficulty")) || 3, 1, 5),
+      difficulty: clamp(Number(valueOf("#subject-difficulty")) || 3, 1, 10),
       topics: [],
     });
     saveState();
@@ -1552,7 +1552,8 @@
     const field = event.currentTarget.dataset.field;
     if (!subject || !field) return;
     const numeric = ["weight", "difficulty"].includes(field);
-    subject[field] = numeric ? clamp(Number(event.currentTarget.value) || 1, 1, 5) : event.currentTarget.value.trim();
+    const max = field === "difficulty" ? 10 : 5;
+    subject[field] = numeric ? clamp(Number(event.currentTarget.value) || 1, 1, max) : event.currentTarget.value.trim();
     if (!subject.name) subject.name = "Matéria sem nome";
     saveState();
     render();
