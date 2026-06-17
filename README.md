@@ -1,6 +1,6 @@
 # Plano Certo
 
-Sistema web local para organizar estudos de concurso: edital, banca, data da prova, materias, ciclo semanal, calendario mensal, revisoes, modo foco, Pomodoro, registro de sessoes e musica ambiente.
+Sistema web local para organizar estudos: edital, banca, data da prova, materias, ciclo semanal, calendario mensal, revisoes, modo foco, Pomodoro, registro de sessoes e musica ambiente.
 
 ## Como abrir
 
